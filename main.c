@@ -29,6 +29,7 @@
 
 unsigned int listAvailableModes(CGDirectDisplayID display, int displayNum);
 unsigned int listCurrentMode(CGDirectDisplayID display, int displayNum);
+unsigned int configureDisplayMax(CGDirectDisplayID display, int displayNum);
 
 int main(int argc, const char *argv[]) {
     // http://developer.apple.com/library/IOs/#documentation/CoreFoundation/Conceptual/CFStrings/Articles/MutableStrings.html
@@ -94,6 +95,10 @@ int main(int argc, const char *argv[]) {
                             exitcode++;
                         }
                     }
+                }
+            } else if (strcmp(argv[1], "max") == 0) {
+                if (!configureDisplayMax(activeDisplays[d], d)) {
+                    exitcode++;
                 }
             } else if (strcmp(argv[1], "-version") == 0) {
                 printf("screenresolution version %s\nLicensed under GPLv2\n", VERSION);
@@ -226,6 +231,49 @@ unsigned int listAvailableModes(CGDirectDisplayID display, int displayNum) {
                 ioflags & kDisplayModeTelevisionFlag ?1:0,
                 ioflags & kDisplayModeValidForMirroringFlag ?1:0 );
 #endif
+    }
+
+    CFRelease(allModes);
+    CFRelease(allModesSorted);
+
+    return returncode;
+}
+
+unsigned int configureDisplayMax(CGDirectDisplayID display, int displayNum) {
+    unsigned int returncode = 1;
+    int numModes = 0;
+
+    CFArrayRef allModes = CGDisplayCopyAllDisplayModes(display, NULL);
+    if (allModes == NULL) {
+        returncode = 0;
+    }
+
+    numModes = CFArrayGetCount(allModes);
+
+    // sort the array of display modes
+    CFMutableArrayRef allModesSorted =  CFArrayCreateMutableCopy(
+                                          kCFAllocatorDefault,
+                                          numModes,
+                                          allModes
+                                        );
+
+    CFArraySortValues(
+        allModesSorted,
+        CFRangeMake(0, CFArrayGetCount(allModesSorted)),
+        (CFComparatorFunction) _compareCFDisplayModes,
+        NULL
+    );
+
+    // Select last one for max resolution
+    CGDisplayModeRef mode = (CGDisplayModeRef) CFArrayGetValueAtIndex(allModesSorted, numModes - 1);
+
+    struct config newConfig;
+    newConfig.w = CGDisplayModeGetWidth(mode);
+    newConfig.h = CGDisplayModeGetHeight(mode);
+    newConfig.d = bitDepth(mode);
+    newConfig.r = CGDisplayModeGetRefreshRate(mode);
+    if (!configureDisplay(display, &newConfig, displayNum)) {
+        returncode = 0;
     }
 
     CFRelease(allModes);
